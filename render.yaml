@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: calatmos-api
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: AIRNOW_API_KEY
+        value: 410E3ED2-7B48-4EA1-A0FB-2E1EDD3B26A1
+      - key: PURPLEAIR_API_KEY
+        value: 147F1AE7-28C6-11F1-B596-4201AC1DC123
+      - key: NASA_FIRMS_KEY
+        value: 0fbf981b730ad905b4de44acb21f7318
+      - key: OPENAQ_API_KEY
+        value: 599c384b507bfa47c13aa077787664be26124318912adb13bfdb769f88aabcda

@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CalAtmos | California Air Intelligence</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f5f7fa;
+      --card: #ffffff;
+      --text: #1a1a2e;
+      --text-muted: #4a5568;
+      --accent: #2563eb;
+      --border: #e2e8f0;
+      --shadow: 0 2px 12px rgba(0,0,0,0.08);
+      --shadow-lg: 0 4px 24px rgba(0,0,0,0.12);
+      --radius: 12px;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --orange: #f97316;
+      --red: #ef4444;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--card); border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow); position: sticky; top: 0; z-index: 1000;
+    }
+    .header-inner {
+      max-width: 1200px; margin: 0 auto; padding: 0 24px;
+      display: flex; align-items: center; justify-content: space-between; height: 68px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+    .brand-icon { font-size: 28px; }
+    .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
+    .brand-name { font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: -0.3px; }
+    .brand-sub  { font-size: 11px; color: var(--text-muted); }
+    .header-byline { font-size: 12px; color: var(--text-muted); text-align: right; }
+    .header-byline strong { color: var(--text); font-weight: 600; }
+
+    /* ── Status banner ── */
+    #status-banner {
+      background: var(--card); border-bottom: 1px solid var(--border);
+      padding: 8px 24px; display: flex; gap: 10px; align-items: center;
+      justify-content: center; flex-wrap: wrap;
+    }
+    .pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px; border-radius: 20px; font-weight: 600; font-size: 11px;
+    }
+    .pill-live   { background: #dcfce7; color: #166534; }
+    .pill-cached { background: #fef9c3; color: #854d0e; }
+    .pill-synth  { background: #fee2e2; color: #991b1b; }
+    .pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    /* ── Main layout ── */
+    main { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+
+    /* ── KPI cards ── */
+    .kpi-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 40px; }
+    .kpi-card {
+      background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+      padding: 20px 22px; display: flex; flex-direction: column; gap: 6px;
+      border-top: 3px solid var(--accent); transition: box-shadow .2s;
+    }
+    .kpi-card:hover { box-shadow: var(--shadow-lg); }
+    .kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: var(--text-muted); }
+    .kpi-value { font-size: 28px; font-weight: 700; color: var(--text); line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .kpi-sub   { font-size: 12px; color: var(--text-muted); }
+    .kpi-change { font-size: 12px; font-weight: 600; }
+    .kpi-change.up      { color: var(--red); }
+    .kpi-change.down    { color: var(--green); }
+    .kpi-change.neutral { color: var(--text-muted); }
+
+    .skeleton {
+      background: linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 50%,#e2e8f0 75%);
+      background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 4px;
+    }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+    /* ── Map sections ── */
+    .map-section {
+      background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+      margin-bottom: 28px; overflow: hidden;
+    }
+    .map-header  { padding: 20px 24px 0; }
+    .map-headline { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+    .map-insight  { font-size: 13px; font-style: italic; color: var(--text-muted); margin-bottom: 14px; line-height: 1.5; }
+    .map-actions  { display: flex; gap: 8px; padding: 0 24px 14px; flex-wrap: wrap; align-items: center; }
+    .map-legend   { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--text-muted); align-items: center; }
+    .legend-item  { display: flex; align-items: center; gap: 4px; }
+    .legend-dot   { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .leaflet-map  { width: 100%; height: 500px; }
+
+    .btn-csv {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--card); color: var(--text-muted);
+      font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s;
+    }
+    .btn-csv:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-csv.flash { background: var(--green); color: #fff; border-color: var(--green); }
+
+    /* Pulse ring for top emitters */
+    .pulse-ring {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: rgba(239,68,68,0.25); border: 2px solid #ef4444;
+      box-shadow: 0 0 0 0 rgba(239,68,68,0.5);
+      animation: pulse-anim 2s ease-out infinite;
+    }
+    @keyframes pulse-anim {
+      0%   { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+      70%  { box-shadow: 0 0 0 14px rgba(239,68,68,0); }
+      100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+    }
+
+    /* ── Section wrapper (non-map sections) ── */
+    .content-section {
+      background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+      margin-bottom: 28px; padding: 24px;
+    }
+    .section-title    { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .section-subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+
+    /* ── Section 5: Pollution Breakdown ── */
+    .city-grid {
+      display: grid; grid-template-columns: repeat(5,1fr); gap: 14px; margin-bottom: 18px;
+    }
+    .city-card {
+      border: 1px solid var(--border); border-radius: 10px; padding: 14px;
+      position: relative; background: var(--bg);
+    }
+    .city-card-name {
+      font-size: 13px; font-weight: 700; color: var(--text);
+      display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+    }
+    .badge-ca {
+      font-size: 9px; font-weight: 700; color: #fff; background: #64748b;
+      padding: 1px 5px; border-radius: 3px; letter-spacing: .4px;
+    }
+    .city-overall-aqi {
+      position: absolute; top: 12px; right: 12px;
+      font-size: 11px; font-weight: 700; color: #fff;
+      padding: 2px 7px; border-radius: 12px; min-width: 32px; text-align: center;
+    }
+    .city-pollutants { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+    .pollutant-pill {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 3px 8px; border-radius: 5px; font-size: 11px;
+    }
+    .pollutant-pill .p-name  { font-weight: 600; color: #fff; }
+    .pollutant-pill .p-val   { font-weight: 700; color: #fff; font-size: 12px; }
+    .city-updated { font-size: 10px; color: var(--text-muted); margin-top: 8px; }
+    .city-unavailable { text-align: center; color: var(--text-muted); font-size: 13px; padding: 20px 0; }
+
+    /* ── Section 6: County Comparison Tool ── */
+    .compare-controls {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px;
+    }
+    .compare-controls select {
+      flex: 1; min-width: 180px; padding: 9px 12px; border: 1px solid var(--border);
+      border-radius: 8px; font-size: 14px; color: var(--text); background: var(--bg);
+      cursor: pointer;
+    }
+    .compare-controls select:focus { outline: 2px solid var(--accent); }
+    .btn-compare {
+      padding: 9px 20px; background: var(--accent); color: #fff;
+      border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: opacity .15s; white-space: nowrap;
+    }
+    .btn-compare:hover { opacity: .87; }
+    .vs-label { font-weight: 700; color: var(--text-muted); font-size: 16px; }
+
+    .compare-result { display: none; }
+    .compare-result.visible { display: block; }
+
+    .compare-cards {
+      display: grid; grid-template-columns: 1fr auto 1fr; gap: 0; align-items: start;
+      margin-bottom: 18px;
+    }
+    .county-card {
+      border: 2px solid var(--border); border-radius: 12px; padding: 20px;
+      background: var(--bg);
+    }
+    .county-card.county-a { border-color: var(--accent); }
+    .county-card.county-b { border-color: var(--orange); }
+    .county-card-name {
+      font-size: 13px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .5px; color: var(--text-muted); margin-bottom: 2px;
+    }
+    .county-card-emission {
+      font-size: 32px; font-weight: 800; color: var(--text); line-height: 1;
+    }
+    .county-card-unit { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+    .county-card-row {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 12px; padding: 5px 0; border-top: 1px solid var(--border);
+    }
+    .county-card-row .label { color: var(--text-muted); }
+    .county-card-row .value { font-weight: 600; }
+    .yoy-up   { color: var(--red); }
+    .yoy-down { color: var(--green); }
+
+    .compare-vs-col {
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 16px; padding-top: 60px;
+      font-size: 20px; font-weight: 800; color: var(--text-muted);
+    }
+
+    .winner-banner {
+      background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 10px;
+      padding: 14px 18px; margin-bottom: 20px;
+      font-size: 13px; color: #0c4a6e; line-height: 1.5;
+    }
+    .winner-banner strong { color: #0369a1; }
+
+    /* CSS Bar Chart */
+    .bar-chart-wrap { margin-bottom: 18px; }
+    .bar-chart-title { font-size: 12px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .5px; color: var(--text-muted); margin-bottom: 10px; }
+    .bar-chart-legend {
+      display: flex; gap: 16px; margin-bottom: 12px; font-size: 11px;
+    }
+    .bar-chart-legend span { display: flex; align-items: center; gap: 5px; font-weight: 600; }
+    .bc-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+    .bar-row {
+      display: grid; grid-template-columns: 130px 1fr 60px 1fr 60px;
+      align-items: center; gap: 6px; margin-bottom: 8px; font-size: 12px;
+    }
+    .bar-metric { color: var(--text-muted); font-weight: 500; }
+    .bar-track  { background: var(--border); border-radius: 4px; height: 14px; overflow: hidden; }
+    .bar-fill   { height: 100%; border-radius: 4px; transition: width .4s ease; }
+    .bar-val    { text-align: right; font-weight: 600; color: var(--text); font-size: 11px; }
+
+    /* ── Footer ── */
+    footer { background: #1a1a2e; color: #94a3b8; margin-top: 60px; padding: 40px 24px 28px; }
+    .footer-inner { max-width: 1200px; margin: 0 auto; }
+    .footer-top {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      flex-wrap: wrap; gap: 24px; margin-bottom: 28px;
+    }
+    .footer-brand .name    { font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+    .footer-brand .tagline { font-size: 13px; color: #94a3b8; max-width: 340px; }
+    .footer-links  { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+    .footer-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 18px; border-radius: 8px; text-decoration: none;
+      font-size: 13px; font-weight: 600; transition: opacity .15s;
+    }
+    .footer-btn:hover  { opacity: .85; }
+    .btn-github        { background: #fff; color: #1a1a2e; }
+    .btn-linkedin      { background: #0a66c2; color: #fff; }
+    .footer-divider    { border: none; border-top: 1px solid #2d3748; margin-bottom: 20px; }
+    .footer-bottom {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 8px; font-size: 11px;
+    }
+    .footer-sources        { display: flex; gap: 10px; flex-wrap: wrap; }
+    .footer-sources a      { color: #60a5fa; text-decoration: none; }
+    .footer-sources a:hover { text-decoration: underline; }
+
+    /* ── Responsive ── */
+    @media (max-width: 1100px) {
+      .city-grid { grid-template-columns: repeat(3,1fr); }
+    }
+    @media (max-width: 900px) {
+      .kpi-grid  { grid-template-columns: repeat(2,1fr); }
+      .city-grid { grid-template-columns: repeat(2,1fr); }
+      .header-byline { display: none; }
+      .compare-cards { grid-template-columns: 1fr; }
+      .compare-vs-col { padding-top: 0; }
+      .bar-row { grid-template-columns: 100px 1fr 50px 1fr 50px; }
+    }
+    @media (max-width: 540px) {
+      .kpi-grid  { grid-template-columns: 1fr 1fr; }
+      .city-grid { grid-template-columns: 1fr 1fr; }
+      main { padding: 16px 14px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="header-inner">
+    <a class="brand" href="#">
+      <span class="brand-icon">&#128752;</span>
+      <div class="brand-text">
+        <span class="brand-name">CalAtmos</span>
+        <span class="brand-sub">California Air Intelligence Platform</span>
+      </div>
+    </a>
+    <div class="header-byline">
+      <strong>Chinmay Das</strong><br>
+      ex-Data Engineer Intern @ CARB &middot; UCR MSCS &rsquo;25
+    </div>
+  </div>
+</header>
+
+<!-- ── Status Banner ── -->
+<div id="status-banner">
+  <span style="color:var(--text-muted);font-size:12px;">Loading data status&hellip;</span>
+</div>
+
+<main>
+
+  <!-- ── KPI Cards ── -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Statewide Emissions</div>
+      <div class="kpi-value" id="kpi-emissions"><div class="skeleton" style="width:80%;height:32px;"></div></div>
+      <div class="kpi-sub">MMTCO&#x2082;e &middot; <span id="kpi-year">--</span></div>
+      <div class="kpi-change" id="kpi-yoy">&nbsp;</div>
+    </div>
+    <div class="kpi-card" style="border-top-color:#22c55e;">
+      <div class="kpi-label">Live Sensors Online</div>
+      <div class="kpi-value" id="kpi-sensors"><div class="skeleton" style="width:60%;height:32px;"></div></div>
+      <div class="kpi-sub">PurpleAir + OpenAQ stations</div>
+      <div class="kpi-change neutral" id="kpi-sensor-src">&nbsp;</div>
+    </div>
+    <div class="kpi-card" style="border-top-color:#f97316;">
+      <div class="kpi-label">Active Fire Points</div>
+      <div class="kpi-value" id="kpi-fires"><div class="skeleton" style="width:50%;height:32px;"></div></div>
+      <div class="kpi-sub">NASA FIRMS &middot; last 24 h</div>
+      <div class="kpi-change neutral" id="kpi-fire-src">&nbsp;</div>
+    </div>
+    <div class="kpi-card" style="border-top-color:#8b5cf6;">
+      <div class="kpi-label">Counties Monitored</div>
+      <div class="kpi-value">58</div>
+      <div class="kpi-sub">All California counties</div>
+      <div class="kpi-change neutral">GHG + AQI coverage</div>
+    </div>
+  </div>
+
+  <!-- ── Map 1: County Choropleth ── -->
+  <div class="map-section">
+    <div class="map-header">
+      <div class="map-headline">Where are California's biggest emitters?</div>
+      <div class="map-insight" id="insight-county">Identifying top-emitting counties from CARB inventory data&hellip;</div>
+    </div>
+    <div class="map-actions">
+      <button class="btn-csv" onclick="downloadCSV('county')">&#11123; Download County CSV</button>
+      <div class="map-legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#22c55e;"></span> Low</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#eab308;"></span> Medium</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#f97316;"></span> High</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#ef4444;"></span> Very High</span>
+        <span class="legend-item">&#9679; Pulsing = Top 5 emitters</span>
+      </div>
+    </div>
+    <div id="map-county" class="leaflet-map"></div>
+  </div>
+
+  <!-- ── Map 2: PurpleAir ── -->
+  <div class="map-section">
+    <div class="map-header">
+      <div class="map-headline">Real-time air quality: PM2.5 across California</div>
+      <div class="map-insight" id="insight-purpleair">Fetching live PurpleAir sensor readings&hellip;</div>
+    </div>
+    <div class="map-actions">
+      <button class="btn-csv" onclick="downloadCSV('purpleair')">&#11123; Download PurpleAir CSV</button>
+      <div class="map-legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#22c55e;"></span> Good (&le;12)</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#eab308;"></span> Moderate (12&ndash;35)</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#f97316;"></span> USG (35&ndash;55)</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#ef4444;"></span> Unhealthy (&gt;55)</span>
+      </div>
+    </div>
+    <div id="map-purpleair" class="leaflet-map"></div>
+  </div>
+
+  <!-- ── Map 3: Wildfires ── -->
+  <div class="map-section">
+    <div class="map-header">
+      <div class="map-headline">Active fire detections: NASA FIRMS (last 24 hours)</div>
+      <div class="map-insight" id="insight-wildfire">Fetching satellite fire detections from NASA FIRMS&hellip;</div>
+    </div>
+    <div class="map-actions">
+      <button class="btn-csv" onclick="downloadCSV('wildfire')">&#11123; Download Fires CSV</button>
+      <div class="map-legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#ef4444;"></span> High confidence</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#f97316;"></span> Nominal</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#94a3b8;"></span> Low confidence</span>
+        <span style="font-size:11px;color:var(--text-muted);">Circle size = fire radiative power</span>
+      </div>
+    </div>
+    <div id="map-wildfire" class="leaflet-map"></div>
+  </div>
+
+  <!-- ── Map 4: OpenAQ ── -->
+  <div class="map-section">
+    <div class="map-header">
+      <div class="map-headline">Ground-level monitoring: OpenAQ PM2.5 stations</div>
+      <div class="map-insight" id="insight-openaq">Fetching OpenAQ ground monitoring network&hellip;</div>
+    </div>
+    <div class="map-actions">
+      <button class="btn-csv" onclick="downloadCSV('openaq')">&#11123; Download OpenAQ CSV</button>
+      <div class="map-legend">
+        <span class="legend-item">
+          <span style="display:inline-block;width:10px;height:10px;background:#2563eb;border-radius:2px;flex-shrink:0;"></span>
+          &nbsp;PM2.5 station
+        </span>
+        <span style="font-size:11px;color:var(--text-muted);">Click marker for latest reading</span>
+      </div>
+    </div>
+    <div id="map-openaq" class="leaflet-map"></div>
+  </div>
+
+  <!-- ── Section 5: California Air Pollution Breakdown ── -->
+  <div class="content-section">
+    <div class="section-title">&#127787;&#65039; California Air Pollution Breakdown</div>
+    <div class="section-subtitle">Live pollutant readings across 5 major cities &mdash; updated hourly via EPA AirNow</div>
+    <div class="city-grid" id="pollution-grid">
+      <!-- Skeleton -->
+      <div class="city-card"><div class="skeleton" style="height:100px;"></div></div>
+      <div class="city-card"><div class="skeleton" style="height:100px;"></div></div>
+      <div class="city-card"><div class="skeleton" style="height:100px;"></div></div>
+      <div class="city-card"><div class="skeleton" style="height:100px;"></div></div>
+      <div class="city-card"><div class="skeleton" style="height:100px;"></div></div>
+    </div>
+    <button class="btn-csv" onclick="downloadCSV('pollution')">&#11123; Download Pollution Data</button>
+  </div>
+
+  <!-- ── Section 6: County Comparison Tool ── -->
+  <div class="content-section">
+    <div class="section-title">&#9878;&#65039; Compare Any Two Counties</div>
+    <div class="section-subtitle">Select two California counties to compare emissions, trends, and air quality</div>
+
+    <div class="compare-controls">
+      <select id="compare-a"></select>
+      <span class="vs-label">VS</span>
+      <select id="compare-b"></select>
+      <button class="btn-compare" onclick="runComparison()">Compare</button>
+    </div>
+
+    <div class="compare-result" id="compare-result">
+      <div class="compare-cards">
+        <div class="county-card county-a" id="card-a"></div>
+        <div class="compare-vs-col">VS</div>
+        <div class="county-card county-b" id="card-b"></div>
+      </div>
+
+      <div class="winner-banner" id="winner-banner"></div>
+
+      <div class="bar-chart-wrap">
+        <div class="bar-chart-title">Side-by-side metrics</div>
+        <div class="bar-chart-legend">
+          <span><span class="bc-dot" style="background:#2563eb;"></span> <span id="legend-a">County A</span></span>
+          <span><span class="bc-dot" style="background:#f97316;"></span> <span id="legend-b">County B</span></span>
+        </div>
+        <div id="bar-chart-rows"></div>
+      </div>
+
+      <button class="btn-csv" style="margin-top:4px;" onclick="downloadCSV('comparison')">&#11123; Download Comparison CSV</button>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Footer ── -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <div class="name">&#128752; CalAtmos</div>
+        <div class="tagline">
+          California Air Intelligence Platform &mdash; built with real CARB, EPA AirNow, NASA FIRMS,
+          PurpleAir and OpenAQ data. Open-source portfolio project.
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:#60a5fa;">
+          Actively seeking full-time Data Engineering / ML Engineering roles &mdash;
+          open to remote, Bay Area, Los Angeles, or Seattle.
+        </div>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/das-Chinmay" target="_blank" class="footer-btn btn-github">&#9900; GitHub</a>
+        <a href="https://linkedin.com/in/chinmay-das07" target="_blank" class="footer-btn btn-linkedin">in LinkedIn</a>
+      </div>
+    </div>
+    <hr class="footer-divider">
+    <div class="footer-bottom">
+      <span>MIT &copy; 2025 Chinmay Das &middot; UC Riverside MSCS</span>
+      <div class="footer-sources">
+        <span>Data:</span>
+        <a href="https://data.ca.gov/dataset/california-greenhouse-gas-emission-inventory" target="_blank">CARB GHG</a>
+        <a href="https://www.epa.gov/aqs" target="_blank">EPA AQS / AirNow</a>
+        <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank">NASA FIRMS</a>
+        <a href="https://www.purpleair.com/" target="_blank">PurpleAir</a>
+        <a href="https://openaq.org/" target="_blank">OpenAQ</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* =========================================================
+   CalAtmos — frontend JS
+   ========================================================= */
+const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:8000'
+  : '';
+const CA_CENTER = [36.7783, -119.4179];
+const CA_BOUNDS = [[32.0, -124.6], [42.1, -113.9]];
+
+// Data store
+const store = {
+  county: null, purpleair: null, wildfire: null, openaq: null,
+  pollution: null, comparison: { a: null, b: null },
+};
+
+/* ── Helpers ── */
+function pm25Color(pm) {
+  if (pm == null || isNaN(pm)) return '#94a3b8';
+  if (pm <= 12) return '#22c55e';
+  if (pm <= 35) return '#eab308';
+  if (pm <= 55) return '#f97316';
+  return '#ef4444';
+}
+
+function choroplethColor(val, max) {
+  const t = Math.min(val / (max * 0.8), 1);
+  if (t < 0.25) return '#22c55e';
+  if (t < 0.5)  return '#eab308';
+  if (t < 0.75) return '#f97316';
+  return '#ef4444';
+}
+
+function frpRadius(frp) { return frp ? Math.min(5 + frp * 0.04, 20) : 5; }
+
+function confColor(c) {
+  return c === 'h' ? '#ef4444' : c === 'n' ? '#f97316' : '#94a3b8';
+}
+
+function setPill(label, src) {
+  let cls = 'pill-synth';
+  if (src === 'live')   cls = 'pill-live';
+  if (src === 'cached') cls = 'pill-cached';
+  return `<span class="pill ${cls}"><span class="pill-dot"></span>${label}: ${src}</span>`;
+}
+
+function minutesAgo(isoStr) {
+  try {
+    const diff = Math.floor((Date.now() - new Date(isoStr + 'Z').getTime()) / 60000);
+    return diff <= 0 ? 'just now' : `${diff} min ago`;
+  } catch (_) { return '--'; }
+}
+
+function flashBtn(type) {
+  const labels = {
+    county:'County CSV', purpleair:'PurpleAir CSV', wildfire:'Fires CSV',
+    openaq:'OpenAQ CSV', pollution:'Pollution Data', comparison:'Comparison CSV',
+  };
+  const btn = document.querySelector(`[onclick="downloadCSV('${type}')"]`);
+  if (!btn) return;
+  btn.classList.add('flash');
+  btn.textContent = '\u2713 Downloaded!';
+  setTimeout(() => {
+    btn.classList.remove('flash');
+    btn.innerHTML = '&#11123; Download ' + labels[type];
+  }, 1500);
+}
+
+/* ── Leaflet map factory ── */
+function makeMap(id) {
+  const m = L.map(id, {
+    center: CA_CENTER, zoom: 6,
+    maxBounds: CA_BOUNDS, maxBoundsViscosity: 0.85,
+    minZoom: 5, maxZoom: 14,
+  });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO', subdomains: 'abcd', maxZoom: 19,
+  }).addTo(m);
+  return m;
+}
+
+const maps = {
+  county:    makeMap('map-county'),
+  purpleair: makeMap('map-purpleair'),
+  wildfire:  makeMap('map-wildfire'),
+  openaq:    makeMap('map-openaq'),
+};
+
+/* ── Status Banner ── */
+async function loadStatus() {
+  try {
+    const d = await fetch(`${API}/api/data-status`).then(r => r.json());
+    const banner = document.getElementById('status-banner');
+    let html = [
+      setPill('CARB GHG', d.carb_data),
+      setPill('AQI', d.aqi_data),
+      setPill('County', d.county_data),
+      `<span style="font-size:11px;color:var(--text-muted);">Data through ${d.data_through_year || 2023}</span>`,
+    ].join('');
+    // Only show non-OpenAQ errors in the banner
+    const errors = (d.errors || []).filter(e => !e.toLowerCase().startsWith('openaq'));
+    if (errors.length) {
+      html += errors.slice(0, 2).map(e =>
+        `<span style="color:#dc2626;font-size:11px;">&#9888; ${e}</span>`).join('');
+    }
+    banner.innerHTML = html;
+  } catch (_) {
+    document.getElementById('status-banner').innerHTML =
+      '<span style="color:#dc2626;font-size:12px;">&#9888; Cannot reach backend</span>';
+  }
+}
+
+/* ── KPI Cards ── */
+async function loadKPIs() {
+  try {
+    const d = await fetch(`${API}/api/summary`).then(r => r.json());
+    document.getElementById('kpi-emissions').textContent = d.total_emissions_mmtco2e.toLocaleString();
+    document.getElementById('kpi-year').textContent = d.reporting_year;
+    const yoy = d.yoy_change_pct;
+    const el = document.getElementById('kpi-yoy');
+    el.textContent = `${yoy > 0 ? '+' : ''}${yoy}% vs prior year`;
+    el.className = 'kpi-change ' + (yoy > 0 ? 'up' : 'down');
+  } catch (_) {
+    document.getElementById('kpi-emissions').textContent = '--';
+  }
+}
+
+async function loadSensorKPIs() {
+  try {
+    const [pa, oq] = await Promise.all([
+      fetch(`${API}/api/sensors/purpleair`).then(r => r.json()).catch(() => ({count:0, data_source:'error'})),
+      fetch(`${API}/api/sensors/openaq`).then(r => r.json()).catch(() => ({count:0, data_source:'error'})),
+    ]);
+    document.getElementById('kpi-sensors').textContent = ((pa.count||0)+(oq.count||0)).toLocaleString();
+    document.getElementById('kpi-sensor-src').textContent = `${pa.data_source} / ${oq.data_source}`;
+  } catch (_) {
+    document.getElementById('kpi-sensors').textContent = '--';
+  }
+  try {
+    const wf = await fetch(`${API}/api/sensors/wildfires`).then(r => r.json()).catch(() => ({count:0, data_source:'error'}));
+    document.getElementById('kpi-fires').textContent = (wf.count||0).toLocaleString();
+    document.getElementById('kpi-fire-src').textContent = wf.data_source;
+  } catch (_) {
+    document.getElementById('kpi-fires').textContent = '--';
+  }
+}
+
+/* ── Map 1: County Choropleth ── */
+const COUNTY_CENTROIDS = {
+  'Los Angeles':[34.05,-118.24], 'Kern':[35.37,-118.73], 'Fresno':[36.74,-119.77],
+  'San Bernardino':[34.10,-117.29], 'Riverside':[33.98,-117.37], 'Sacramento':[38.58,-121.49],
+  'Alameda':[37.60,-122.01], 'San Diego':[32.72,-117.15], 'Contra Costa':[37.92,-121.96],
+  'Orange':[33.70,-117.75], 'Tulare':[36.21,-119.35], 'Stanislaus':[37.56,-120.99],
+  'San Joaquin':[37.93,-121.27], 'Monterey':[36.24,-121.31], 'Santa Clara':[37.35,-121.90],
+};
+
+async function loadCountyMap() {
+  try {
+    const [cData, gData] = await Promise.all([
+      fetch(`${API}/api/emissions/by-county`).then(r => r.json()),
+      fetch(`${API}/api/geospatial/hotspots`).then(r => r.json()),
+    ]);
+    store.county = cData;
+
+    const { counties, emissions_2023: emis, yoy_change, primary_sector, per_capita } = cData;
+    const maxEm = Math.max(...emis);
+    const lookup = {};
+    counties.forEach((c, i) => {
+      lookup[c] = { emissions: emis[i], change: yoy_change[i], sector: primary_sector[i], perCapita: per_capita[i] };
+    });
+
+    const top5 = [...counties].map((c,i)=>({c,e:emis[i]})).sort((a,b)=>b.e-a.e).slice(0,5).map(x=>x.c);
+
+    if (gData && gData.features) {
+      L.geoJSON(gData, {
+        style: feat => {
+          const name = (feat.properties.name||feat.properties.NAME||'').replace(' County','');
+          return { fillColor: choroplethColor((lookup[name]||{}).emissions||0, maxEm),
+                   fillOpacity: 0.65, color: '#fff', weight: 1 };
+        },
+        onEachFeature: (feat, layer) => {
+          const name = (feat.properties.name||feat.properties.NAME||'').replace(' County','');
+          const info = lookup[name]||{};
+          layer.bindPopup(
+            `<strong>${name} County</strong><br>` +
+            `2023: <b>${(info.emissions||0).toFixed(2)} MMTCO&#x2082;e</b><br>` +
+            `YoY: <b>${(info.change||0).toFixed(1)}%</b><br>` +
+            `Sector: <b>${info.sector||'--'}</b><br>` +
+            `Per capita: <b>${(info.perCapita||0).toFixed(2)} tCO&#x2082;e</b>`
+          );
+        },
+      }).addTo(maps.county);
+
+      gData.features.forEach(f => {
+        const name = (f.properties.name||f.properties.NAME||'').replace(' County','');
+        if (!top5.includes(name)) return;
+        let lat, lng;
+        try {
+          const coords = f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates[0][0] : f.geometry.coordinates[0];
+          lat = coords.reduce((s,c)=>s+c[1],0)/coords.length;
+          lng = coords.reduce((s,c)=>s+c[0],0)/coords.length;
+        } catch (_) {
+          const fb = COUNTY_CENTROIDS[name]; if (!fb) return;
+          [lat, lng] = fb;
+        }
+        const icon = L.divIcon({ className:'', iconSize:[30,30], iconAnchor:[15,15], html:'<div class="pulse-ring"></div>' });
+        L.marker([lat,lng], {icon}).bindPopup(
+          `<strong>&#9733; #${top5.indexOf(name)+1}</strong> ${name}: <b>${((lookup[name]||{}).emissions||0).toFixed(2)} MMTCO&#x2082;e</b>`
+        ).addTo(maps.county);
+      });
+    }
+
+    const top = counties[0];
+    const minIdx = yoy_change.indexOf(Math.min(...yoy_change));
+    document.getElementById('insight-county').textContent =
+      `${top} leads statewide at ${emis[0].toFixed(1)} MMTCO\u2082e \u2014 driven by ` +
+      `${(lookup[top]||{}).sector||'transportation'}. ` +
+      `${counties[minIdx]} showed the strongest year-over-year improvement at ${yoy_change[minIdx].toFixed(1)}%.`;
+  } catch (e) {
+    document.getElementById('insight-county').textContent = `County data unavailable: ${e.message}`;
+  }
+}
+
+/* ── Map 2: PurpleAir ── */
+async function loadPurpleAirMap() {
+  try {
+    const res = await fetch(`${API}/api/sensors/purpleair`).then(r => r.json());
+    store.purpleair = res;
+    const sensors = res.sensors || [];
+
+    sensors.forEach(s => {
+      if (!s.lat || !s.lon) return;
+      const pm = s.pm25_now;  // BUG FIX: was s.pm25, backend returns pm25_now
+      L.circleMarker([s.lat, s.lon], {
+        radius: 6,
+        fillColor: pm25Color(pm),
+        fillOpacity: 0.85,
+        color: '#fff',
+        weight: 1,
+      }).bindPopup(
+        `<strong>${s.name||'PurpleAir'}</strong><br>` +
+        `PM2.5: <b>${pm != null ? pm.toFixed(1)+' \u03bcg/m\u00b3' : 'N/A'}</b><br>` +
+        `24hr: <b>${s.pm25_24hr != null ? s.pm25_24hr.toFixed(1)+' \u03bcg/m\u00b3' : 'N/A'}</b><br>` +
+        `Category: <b>${s.category||'--'}</b>`
+      ).addTo(maps.purpleair);
+    });
+
+    const valid = sensors.filter(s => s.pm25_now != null && !isNaN(s.pm25_now));
+    const avg   = valid.length ? (valid.reduce((a,s)=>a+s.pm25_now,0)/valid.length).toFixed(1) : null;
+    const bad   = valid.filter(s => s.pm25_now >= 55).length;
+    document.getElementById('insight-purpleair').textContent = avg
+      ? `${sensors.length.toLocaleString()} PurpleAir sensors active across California. ` +
+        `Average PM2.5: ${avg} \u03bcg/m\u00b3. ${bad} sensor${bad!==1?'s':''} in the unhealthy range. Source: ${res.data_source}.`
+      : `${sensors.length.toLocaleString()} sensors loaded. Source: ${res.data_source}.`;
+  } catch (e) {
+    document.getElementById('insight-purpleair').textContent = `PurpleAir data unavailable: ${e.message}`;
+  }
+}
+
+/* ── Map 3: Wildfires ── */
+async function loadWildfireMap() {
+  try {
+    const res = await fetch(`${API}/api/sensors/wildfires`).then(r => r.json());
+    store.wildfire = res;
+    const fires = res.fires || [];
+
+    fires.forEach(f => {
+      if (!f.lat || !f.lon) return;
+      L.circleMarker([f.lat, f.lon], {
+        radius: frpRadius(f.frp), fillColor: confColor(f.confidence),
+        color: 'rgba(0,0,0,0.2)', weight: 0.5, fillOpacity: 0.75,
+      }).bindPopup(
+        `<strong>Fire Detection</strong><br>` +
+        `Confidence: <b>${f.confidence==='h'?'High':f.confidence==='n'?'Nominal':'Low'}</b><br>` +
+        `FRP: <b>${f.frp ? f.frp.toFixed(1)+' MW':'N/A'}</b><br>Acquired: <b>${f.acq_date||'--'}</b>`
+      ).addTo(maps.wildfire);
+    });
+
+    const high = fires.filter(f=>f.confidence==='h').length;
+    document.getElementById('insight-wildfire').textContent = fires.length
+      ? `${fires.length} fire point${fires.length!==1?'s':''} detected in California in the last 24 hours. ` +
+        `${high} with high confidence. Source: ${res.data_source}.`
+      : `No active fire detections in California in the last 24 hours. Source: ${res.data_source}.`;
+  } catch (e) {
+    document.getElementById('insight-wildfire').textContent = `Wildfire data unavailable: ${e.message}`;
+  }
+}
+
+/* ── Map 4: OpenAQ (silent errors) ── */
+async function loadOpenAQMap() {
+  try {
+    const res = await fetch(`${API}/api/sensors/openaq`).then(r => r.json());
+    store.openaq = res;
+    const stations = res.stations || [];
+
+    if (res.data_source === 'error' || stations.length === 0) {
+      document.getElementById('insight-openaq').textContent =
+        'OpenAQ ground station data currently unavailable. The API may require a valid key or be temporarily unreachable.';
+      return;
+    }
+
+    stations.forEach(s => {
+      if (!s.lat || !s.lon) return;
+      const icon = L.divIcon({
+        className: '', iconSize:[12,12], iconAnchor:[6,6],
+        html:'<div style="width:12px;height:12px;background:#2563eb;border:2px solid #fff;border-radius:2px;box-shadow:0 1px 4px rgba(0,0,0,0.3);"></div>',
+      });
+      L.marker([s.lat, s.lon], {icon}).bindPopup(
+        `<strong>${s.name||'OpenAQ'}</strong><br>` +
+        `PM2.5: <b>${s.pm25!=null?s.pm25.toFixed(1)+' \u03bcg/m\u00b3':'N/A'}</b><br>` +
+        `City: <b>${s.city||'--'}</b>`
+      ).addTo(maps.openaq);
+    });
+
+    const insightEl = document.getElementById('insight-openaq');
+    if (res.insight) {
+      insightEl.textContent =
+        `${stations.length} OpenAQ station${stations.length!==1?'s':''} with live PM2.5 readings. ` +
+        `${res.insight}. Source: ${res.data_source}.`;
+    } else {
+      insightEl.textContent =
+        `${stations.length} OpenAQ station${stations.length!==1?'s':''} reporting current PM2.5. Source: ${res.data_source}.`;
+    }
+  } catch (_) {
+    // Silently show unavailable — no error rethrown
+    document.getElementById('insight-openaq').textContent =
+      'OpenAQ ground station data currently unavailable.';
+  }
+}
+
+/* ── Section 5: Pollution Breakdown ── */
+async function loadPollutionSection() {
+  try {
+    const res = await fetch(`${API}/api/pollution/cities`).then(r => r.json());
+    store.pollution = res;
+    const cities = res.cities || [];
+    const grid = document.getElementById('pollution-grid');
+
+    if (!cities.length) {
+      grid.innerHTML = '<div class="city-unavailable" style="grid-column:1/-1;">Air pollution data currently unavailable. Check AirNow API key.</div>';
+      return;
+    }
+
+    grid.innerHTML = cities.map(city => {
+      const pills = (city.pollutants||[]).map(p =>
+        `<div class="pollutant-pill" style="background:${p.color};">
+          <span class="p-name">${p.name}</span>
+          <span class="p-val">${p.aqi}</span>
+        </div>`
+      ).join('');
+
+      const minsAgo = minutesAgo(city.updated);
+      return `
+        <div class="city-card">
+          <div class="city-card-name">
+            ${city.city} <span class="badge-ca">CA</span>
+          </div>
+          <span class="city-overall-aqi" style="background:${city.overall_color};">${city.overall_aqi}</span>
+          <div class="city-pollutants">${pills || '<span style="font-size:11px;color:var(--text-muted);">No readings</span>'}</div>
+          <div class="city-updated">Updated ${minsAgo}</div>
+        </div>`;
+    }).join('');
+  } catch (_) {
+    document.getElementById('pollution-grid').innerHTML =
+      '<div class="city-unavailable" style="grid-column:1/-1;">Air pollution data currently unavailable.</div>';
+  }
+}
+
+/* ── Section 6: County Comparison Tool ── */
+function buildCountyDropdowns(counties) {
+  const opts = counties.map(c => `<option value="${c}">${c}</option>`).join('');
+  document.getElementById('compare-a').innerHTML = opts;
+  document.getElementById('compare-b').innerHTML = opts;
+  // Default: LA vs Riverside
+  document.getElementById('compare-a').value = 'Los Angeles';
+  document.getElementById('compare-b').value = 'Riverside';
+}
+
+function renderCountyCard(el, data, colorClass) {
+  const yoySign = data.yoy_change_pct > 0 ? '+' : '';
+  const yoyCls  = data.yoy_change_pct > 0 ? 'yoy-up' : 'yoy-down';
+  const yoyArrow = data.yoy_change_pct > 0 ? '&#9650;' : '&#9660;';
+  el.innerHTML = `
+    <div class="county-card-name">${data.county}</div>
+    <div class="county-card-emission">${data.emissions_2023.toFixed(1)}</div>
+    <div class="county-card-unit">MMTCO&#x2082;e &middot; 2023 emissions</div>
+    <div class="county-card-row">
+      <span class="label">vs 2022</span>
+      <span class="value ${yoyCls}">${yoyArrow} ${yoySign}${data.yoy_change_pct.toFixed(1)}%</span>
+    </div>
+    <div class="county-card-row">
+      <span class="label">Primary sector</span>
+      <span class="value">${data.primary_sector}</span>
+    </div>
+    <div class="county-card-row">
+      <span class="label">Per capita</span>
+      <span class="value">${data.per_capita.toFixed(1)} tCO&#x2082;e/person</span>
+    </div>
+  `;
+}
+
+function renderBarChart(a, b) {
+  const metrics = [
+    { label: 'Total Emissions (MMTCO\u2082e)', va: a.emissions_2023, vb: b.emissions_2023, fmt: v => v.toFixed(1) },
+    { label: 'Per Capita (tCO\u2082e/person)',  va: a.per_capita,      vb: b.per_capita,      fmt: v => v.toFixed(1) },
+    { label: 'YoY Change (%)',                  va: Math.abs(a.yoy_change_pct), vb: Math.abs(b.yoy_change_pct), fmt: v => v.toFixed(1)+'%' },
+  ];
+  const rows = metrics.map(m => {
+    const maxV = Math.max(m.va, m.vb, 0.001);
+    const pctA = Math.round((m.va / maxV) * 100);
+    const pctB = Math.round((m.vb / maxV) * 100);
+    return `
+      <div class="bar-row">
+        <span class="bar-metric">${m.label}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${pctA}%;background:#2563eb;"></div></div>
+        <span class="bar-val">${m.fmt(m.va)}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${pctB}%;background:#f97316;"></div></div>
+        <span class="bar-val">${m.fmt(m.vb)}</span>
+      </div>`;
+  }).join('');
+  document.getElementById('bar-chart-rows').innerHTML = rows;
+}
+
+function renderWinnerBanner(a, b) {
+  const ratio    = (a.emissions_2023 / b.emissions_2023).toFixed(1);
+  const bigger   = a.emissions_2023 > b.emissions_2023 ? a.county : b.county;
+  const smaller  = a.emissions_2023 > b.emissions_2023 ? b.county : a.county;
+  const highPerC = a.per_capita > b.per_capita ? a.county : b.county;
+  const lowPerC  = a.per_capita > b.per_capita ? b.county : a.county;
+  const improved = a.yoy_change_pct < b.yoy_change_pct ? a.county : b.county;
+
+  document.getElementById('winner-banner').innerHTML =
+    `<strong>${bigger}</strong> emits <strong>${ratio}x</strong> more than <strong>${smaller}</strong> in total, ` +
+    `but <strong>${highPerC}</strong> has higher per-capita emissions than <strong>${lowPerC}</strong>. ` +
+    `<strong>${improved}</strong> showed better year-over-year improvement.`;
+}
+
+async function runComparison() {
+  const selA = document.getElementById('compare-a').value;
+  const selB = document.getElementById('compare-b').value;
+
+  if (!store.county) return;
+  const { counties, emissions_2023, emissions_2022, yoy_change, primary_sector, per_capita } = store.county;
+
+  const makeEntry = name => {
+    const i = counties.indexOf(name);
+    if (i < 0) return null;
+    return { county: name, emissions_2023: emissions_2023[i], emissions_2022: emissions_2022[i],
+             yoy_change_pct: yoy_change[i], primary_sector: primary_sector[i], per_capita: per_capita[i] };
+  };
+
+  const a = makeEntry(selA);
+  const b = makeEntry(selB);
+  if (!a || !b) return;
+
+  store.comparison = { a, b };
+
+  document.getElementById('legend-a').textContent = a.county;
+  document.getElementById('legend-b').textContent = b.county;
+
+  renderCountyCard(document.getElementById('card-a'), a, 'county-a');
+  renderCountyCard(document.getElementById('card-b'), b, 'county-b');
+  renderWinnerBanner(a, b);
+  renderBarChart(a, b);
+
+  document.getElementById('compare-result').classList.add('visible');
+}
+
+/* ── CSV Download ── */
+function downloadCSV(type) {
+  let rows = [], filename = '';
+
+  if (type === 'county' && store.county) {
+    const d = store.county;
+    rows = [['County','Emissions_2023_MMTCO2e','Emissions_2022_MMTCO2e','YoY_Change_Pct','Per_Capita_tCO2e','Primary_Sector']];
+    d.counties.forEach((c,i) => rows.push([c, d.emissions_2023[i], d.emissions_2022[i], d.yoy_change[i], d.per_capita[i], d.primary_sector[i]]));
+    filename = 'calAtmos_county_emissions.csv';
+
+  } else if (type === 'purpleair' && store.purpleair) {
+    rows = [['Name','Latitude','Longitude','PM25_Now_ugm3','PM25_24hr_ugm3','Category']];
+    (store.purpleair.sensors||[]).forEach(s =>
+      rows.push([s.name||'', s.lat, s.lon, s.pm25_now??'', s.pm25_24hr??'', s.category||'']));
+    filename = 'calAtmos_purpleair.csv';
+
+  } else if (type === 'wildfire' && store.wildfire) {
+    rows = [['Latitude','Longitude','FRP_MW','Confidence','Acq_Date']];
+    (store.wildfire.fires||[]).forEach(f =>
+      rows.push([f.lat, f.lon, f.frp??'', f.confidence, f.acq_date||'']));
+    filename = 'calAtmos_wildfires.csv';
+
+  } else if (type === 'openaq' && store.openaq) {
+    rows = [['Name','City','Latitude','Longitude','PM25_ugm3']];
+    (store.openaq.stations||[]).forEach(s =>
+      rows.push([s.name||'', s.city||'', s.lat, s.lon, s.pm25??'']));
+    filename = 'calAtmos_openaq.csv';
+
+  } else if (type === 'pollution' && store.pollution) {
+    rows = [['City','Pollutant','AQI','Category']];
+    (store.pollution.cities||[]).forEach(city =>
+      (city.pollutants||[]).forEach(p =>
+        rows.push([city.city, p.name, p.aqi, p.category])));
+    filename = 'calAtmos_pollution.csv';
+
+  } else if (type === 'comparison' && store.comparison.a && store.comparison.b) {
+    const {a, b} = store.comparison;
+    rows = [['Metric', a.county, b.county, 'Difference', 'Winner']];
+    const metrics = [
+      ['Total Emissions (MMTCO2e)', a.emissions_2023, b.emissions_2023],
+      ['Per Capita (tCO2e/person)',  a.per_capita,     b.per_capita],
+      ['YoY Change (%)',             a.yoy_change_pct, b.yoy_change_pct],
+    ];
+    metrics.forEach(([label, va, vb]) => {
+      const diff = (va - vb).toFixed(2);
+      const winner = va < vb ? a.county : b.county;
+      rows.push([label, va, vb, diff, winner]);
+    });
+    filename = `calAtmos_comparison_${a.county}_vs_${b.county}.csv`.replace(/ /g,'_');
+
+  } else { return; }
+
+  const csv = rows.map(r => r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a2 = document.createElement('a');
+  a2.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a2.download = filename; a2.click();
+  flashBtn(type);
+}
+
+/* ── Bootstrap ── */
+(async () => {
+  await loadStatus();
+
+  // Parallel: KPIs + sensor KPIs + all 4 maps + pollution + county (for comparison dropdowns)
+  const [_, countyRes] = await Promise.all([
+    loadKPIs(),
+    fetch(`${API}/api/emissions/by-county`).then(r=>r.json()).catch(()=>null),
+    loadSensorKPIs(),
+    loadCountyMap(),
+    loadPurpleAirMap(),
+    loadWildfireMap(),
+    loadOpenAQMap(),
+    loadPollutionSection(),
+  ]);
+
+  // County data is needed for the comparison tool dropdowns
+  if (countyRes && countyRes.counties) {
+    store.county = countyRes;
+    buildCountyDropdowns(countyRes.counties);
+    await runComparison(); // Load default: LA vs Riverside
+  }
+
+  // Auto-refresh status + sensor KPIs every 5 min
+  setInterval(async () => {
+    await loadStatus();
+    await loadSensorKPIs();
+  }, 300000);
+})();
+</script>
+</body>
+</html>
