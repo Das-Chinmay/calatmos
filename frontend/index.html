@@ -603,8 +603,11 @@ async function loadStatus() {
       setPill('County', d.county_data),
       `<span style="font-size:11px;color:var(--text-muted);">Data through ${d.data_through_year || 2023}</span>`,
     ].join('');
-    // Only show non-OpenAQ errors in the banner
-    const errors = (d.errors || []).filter(e => !e.toLowerCase().startsWith('openaq'));
+    // Suppress sensor-level errors from the banner (OpenAQ, PurpleAir)
+    const errors = (d.errors || []).filter(e => {
+      const lower = e.toLowerCase();
+      return !lower.startsWith('openaq') && !lower.startsWith('purpleair');
+    });
     if (errors.length) {
       html += errors.slice(0, 2).map(e =>
         `<span style="color:#dc2626;font-size:11px;">&#9888; ${e}</span>`).join('');

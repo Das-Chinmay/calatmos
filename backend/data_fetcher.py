@@ -668,7 +668,7 @@ async def fetch_purpleair_sensors() -> tuple[list, str]:
 
     except Exception as e:
         logger.warning(f"PurpleAir fetch failed - {e}")
-        _status["errors"].append(f"PurpleAir - {e}")
+        # Don't surface PurpleAir errors in the status banner; show silently
         if cache_path.exists():
             with open(cache_path) as f:
                 return json.load(f), "cached"
