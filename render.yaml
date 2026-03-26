@@ -7,6 +7,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
       - key: AIRNOW_API_KEY
         value: 410E3ED2-7B48-4EA1-A0FB-2E1EDD3B26A1
       - key: PURPLEAIR_API_KEY
